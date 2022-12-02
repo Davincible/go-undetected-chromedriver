@@ -89,7 +89,13 @@ func (p *Patcher) Patch() (string, error) {
 
 	driver = patchDriver(driver)
 
-	if err := os.WriteFile(p.binaryPath, driver, 0644); err != nil { //nolint:gosec
+	if _, err := os.Stat(p.binaryPath); err == nil {
+		if err := os.Remove(p.binaryPath); err != nil {
+			return "", fmt.Errorf("failed to remove old driver '%s': %w", p.binaryPath, err)
+		}
+	}
+
+	if err := os.WriteFile(p.binaryPath, driver, 0755); err != nil { //nolint:gosec
 		return "", err
 	}
 
@@ -174,7 +180,7 @@ func (p *Patcher) downloadDriver(version string) (string, error) {
 
 	// Return if zip file already exists.
 	zipPath := path.Join(os.TempDir(), p.zipName)
-	if _, err := os.Stat(zipPath); os.IsExist(err) {
+	if _, err := os.Stat(zipPath); err == nil {
 		return zipPath, nil
 	}
 
