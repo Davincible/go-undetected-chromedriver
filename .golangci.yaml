@@ -73,6 +73,7 @@ linters-settings:
       - ch
       - wg
       - mu
+      - re
     ignore-decls:
       - c echo.Context
       - t testing.T
@@ -193,7 +194,7 @@ linters:
 
     # Can be considered to be enabled
     - gochecknoinits
-    # - gochecknoglobals # RIP
+    - gochecknoglobals
     - dogsled
     - wrapcheck
     - paralleltest
