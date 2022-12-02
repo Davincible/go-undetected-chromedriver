@@ -13,6 +13,7 @@ import (
 )
 
 func TestPatcherLatest(t *testing.T) {
+	// CI is slow
 	RequestTimeout = 30 * time.Second
 
 	p, err := NewPatcher("", 0)
@@ -36,6 +37,7 @@ func TestPatcherLatest(t *testing.T) {
 }
 
 func TestPatcherVersionPin(t *testing.T) {
+	// CI is slow
 	RequestTimeout = 30 * time.Second
 
 	p, err := NewPatcher("", 105)

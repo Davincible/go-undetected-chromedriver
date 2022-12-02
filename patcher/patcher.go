@@ -37,7 +37,7 @@ var (
 	letters = []byte("abcdefghijklmnopqrstuvwxyz")
 
 	// RequestTimeout is the HTTP request timeout.
-	RequestTimeout = 10 * time.Second
+	RequestTimeout = 15 * time.Second
 )
 
 type platform string
@@ -53,11 +53,11 @@ type Patcher struct {
 	majorVersion int
 }
 
-// NewPatcher returns a new patcher instance.
+// New returns a new patcher instance.
 //
 // binaryPath is an optional path to store write the patche binary to.
 // version is the major chrome version driver to download and patch, e.g. '107'.
-func NewPatcher(binaryPath string, version int) (Patcher, error) {
+func New(binaryPath string, version int) (Patcher, error) {
 	var p Patcher
 
 	p.client = &http.Client{Timeout: RequestTimeout}
