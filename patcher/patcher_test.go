@@ -16,7 +16,7 @@ func TestPatcherLatest(t *testing.T) {
 	// CI is slow
 	RequestTimeout = 30 * time.Second
 
-	p, err := NewPatcher("", 0)
+	p, err := New("", 0)
 	require.NoError(t, err, "create patcher")
 
 	path, err := p.Patch()
@@ -40,7 +40,7 @@ func TestPatcherVersionPin(t *testing.T) {
 	// CI is slow
 	RequestTimeout = 30 * time.Second
 
-	p, err := NewPatcher("", 105)
+	p, err := New("", 105)
 	require.NoError(t, err, "create patcher")
 
 	path, err := p.Patch()
