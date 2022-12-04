@@ -20,4 +20,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/tebeka/selenium => /home/tyler/UndetectedChromeDriver/lib/go-selenium
+replace github.com/tebeka/selenium => /home/tyler/UndetectedChromeDriver/lib/selenium

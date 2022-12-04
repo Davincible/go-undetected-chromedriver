@@ -1,7 +1,9 @@
 package goundetectedchromedriver
 
+// Option is a functional option type.
 type Option func(*Config)
 
+// Config for Chrome config.
 type Config struct {
 	// DriverExecutable can optionally be set to provide a custom driver.
 	// If the driver is not patched yet it will be patched automatically.
@@ -50,18 +52,29 @@ type Config struct {
 	PatcherForceClose    bool
 }
 
-func NewConfig() Config {
-	return Config{}
+// NewConfig creates new config object.
+func NewConfig(opts ...Option) Config {
+	c := Config{}
+
+	for _, o := range opts {
+		o(&c)
+	}
+
+	return c
 }
 
+// WithDebug sets the debug option.
 func WithDebug() Option {
 	return func(c *Config) {
 		c.Debug = true
 	}
 }
 
+// WithUserDataDir sets a directory to use as chrome user profile.
 func WithUserDataDir(path string) Option {
 	return func(c *Config) {
 		c.UserDataDir = path
 	}
 }
+
+// TODO: implement other options

@@ -20,67 +20,106 @@ import (
 	"github.com/Davincible/go-undetected-chromedriver/patcher"
 )
 
+// Errors.
 var (
 	ErrChromeNotFound = errors.New("chrome executable not found, please install or provide a path")
 )
 
+// Chrome implements a webdriver that is connected the undetected chromedriver.
 type Chrome struct {
 	selenium.WebDriver
+
+	config Config
 
 	driverPath string
 	driverArgs []string
 	chromePath string
 	chromeArgs []string
 
-	userDataDir string
-	headless    bool
+	headless bool
 
 	port         string
 	debuggerAddr string
 
 	chrome *exec.Cmd
 	driver *exec.Cmd
-
-	config Config
 }
 
+// NewChromeDriver creates a new webdriver instance connected to the undetected
+// chromedriver.
 func NewChromeDriver(opts ...Option) (Chrome, error) {
-	c := Chrome{config: NewConfig()}
+	wd := Chrome{config: NewConfig(opts...)} //nolint:varnamelen
 
-	for _, o := range opts {
-		o(&c.config)
-	}
-
-	if c.config.Debug {
+	if wd.config.Debug {
 		handler := (slog.HandlerOptions{Level: slog.DebugLevel}).NewTextHandler(os.Stdout)
 		slog.SetDefault(slog.New(handler))
 	}
 
+	if err := wd.setup(); err != nil {
+		return wd, err
+	}
+
+	if err := wd.startChrome(); err != nil {
+		return wd, err
+	}
+
+	if err := wd.startDriver(); err != nil {
+		return wd, err
+	}
+
+	time.Sleep(3 * time.Second)
+
+	if err := wd.connect(); err != nil {
+		return wd, err
+	}
+
+	// TODO: cdp events
+
+	// TODO: config headless
+
+	return wd, nil
+}
+
+// Get navigates the browser to the provided URL.
+func (c *Chrome) Get(url string) error {
+	if c.getCdcProps() {
+		slog.Debug("removing cdc props")
+		c.removeCdcProps()
+	}
+
+	return c.WebDriver.Get(url)
+}
+
+func (c *Chrome) patch() error {
 	version := c.config.Version
 	if version == 0 {
 		var err error
 
 		version, err = getChromeVersion()
 		if err != nil {
-			return c, err
+			return err
 		}
 	}
 
 	p, err := patcher.New(c.config.DriverExecutable, version)
 	if err != nil {
-		return c, err
+		return err
 	}
 
-	slog.Debug("patching binary")
+	slog.Debug("patching binary", slog.Int("vesion", version))
 
 	c.driverPath, err = p.Patch()
 	if err != nil {
-		return c, err
+		return err
 	}
 
+	return nil
+}
+
+func (c *Chrome) setDebugger() error {
 	dHost, dPort, err := c.getDebuggerAddress()
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	c.chromeArgs = c.config.ChromeArgs
@@ -90,20 +129,32 @@ func NewChromeDriver(opts ...Option) (Chrome, error) {
 	)
 	c.debuggerAddr = dHost + ":" + dPort
 
+	return nil
+}
+
+func (c *Chrome) setUserData() error {
+	var (
+		err error
+		dir string
+	)
+
 	if len(c.config.UserDataDir) > 0 {
-		c.userDataDir = c.config.UserDataDir
+		dir = c.config.UserDataDir
 	} else {
-		c.userDataDir, err = os.MkdirTemp("", "undetected-chromedriver-userdata-*")
+		dir, err = os.MkdirTemp("", "undetected-chromedriver-userdata-*")
 		if err != nil {
-			return c, fmt.Errorf("failed to create temp userdata dir: %w", err)
+			return fmt.Errorf("failed to create temp userdata dir: %w", err)
 		}
 	}
 
-	// TODO: maybe make userdatadir a local var
 	c.chromeArgs = append(c.chromeArgs,
-		"--user-data-dir="+c.userDataDir,
+		"--user-data-dir="+dir,
 	)
 
+	return nil
+}
+
+func (c *Chrome) setLocale() {
 	lang := "en-US"
 	if tag, err := locale.Detect(); err != nil && len(tag.String()) > 0 {
 		lang = tag.String()
@@ -112,19 +163,25 @@ func NewChromeDriver(opts ...Option) (Chrome, error) {
 	c.chromeArgs = append(c.chromeArgs,
 		"--lang="+lang,
 	)
+}
 
+func (c *Chrome) setNoWelcome() {
 	if c.config.SuppressWelcome {
 		c.chromeArgs = append(c.chromeArgs,
 			"--no-default-browser-check", "--no-first-run",
 		)
 	}
+}
 
+func (c *Chrome) setNoSandbox() {
 	if !c.config.Sandbox {
 		c.chromeArgs = append(c.chromeArgs,
 			"--no-sandbox", "--test-type",
 		)
 	}
+}
 
+func (c *Chrome) setHeadless() {
 	if !c.config.Headless {
 		c.headless = true
 		c.chromeArgs = append(c.chromeArgs,
@@ -133,44 +190,53 @@ func NewChromeDriver(opts ...Option) (Chrome, error) {
 			"--start-maximized",
 		)
 	}
+}
 
+func (c *Chrome) setLogLevel() {
 	c.chromeArgs = append(c.chromeArgs,
 		"--log-level="+strconv.Itoa(c.config.LogLevel),
 	)
+}
+
+func (c *Chrome) setup() error {
+	if err := c.patch(); err != nil {
+		return err
+	}
+
+	if err := c.setDebugger(); err != nil {
+		return err
+	}
+
+	if err := c.setUserData(); err != nil {
+		return err
+	}
+
+	c.setLocale()
+	c.setNoWelcome()
+	c.setNoSandbox()
+	c.setHeadless()
+	c.setLogLevel()
 
 	// TODO: tab restore nag
 
-	if err := c.startChrome(); err != nil {
-		return c, err
-	}
-
-	if err := c.startDriver(); err != nil {
-		return c, err
-	}
-
-	time.Sleep(3 * time.Second)
-
-	if err := c.connect(); err != nil {
-		return c, err
-	}
-
-	// TODO: cdp events
-
-	// TODO: config headless
-
-	return c, nil
-}
-
-func (c *Chrome) Get(url string) error {
-	if c.getCdcProps() {
-		c.removeCdcProps()
-	}
-
-	return c.WebDriver.Get(url)
+	return nil
 }
 
 func (c *Chrome) removeCdcProps() {
-	// TODO: implement
+	if _, err := c.ExecuteChromeDPCommand("Page.addScriptToEvaluateOnNewDocument", map[string]string{
+		"source": `
+         let objectToInspect = window,
+             result = [];
+         while(objectToInspect !== null)
+         { result = result.concat(Object.getOwnPropertyNames(objectToInspect));
+           objectToInspect = Object.getPrototypeOf(objectToInspect); }
+         result.forEach(p => p.match(/.+_.+_(Array|Promise|Symbol)/ig)
+                             &&delete window[p]&&console.log('removed',p))
+
+		`,
+	}); err != nil {
+		slog.Error("execute remove cdc props", err)
+	}
 }
 
 func (c *Chrome) getCdcProps() bool {
@@ -202,7 +268,7 @@ func (c *Chrome) startChrome() error {
 		return ErrChromeNotFound
 	}
 
-	c.chrome = exec.Command(c.chromePath, c.chromeArgs...)
+	c.chrome = exec.Command(c.chromePath, c.chromeArgs...) //nolint:gosec
 
 	slog.Debug("Starting Chrome", slog.String("cmd", c.chrome.String()))
 
@@ -235,7 +301,7 @@ func (c *Chrome) startDriver() error {
 
 	c.driverArgs = append(c.driverArgs, "--port="+c.port)
 
-	c.driver = exec.Command(c.driverPath, c.driverArgs...)
+	c.driver = exec.Command(c.driverPath, c.driverArgs...) //nolint:gosec
 
 	if c.config.Debug {
 		c.driver.Stdout = os.Stdout
